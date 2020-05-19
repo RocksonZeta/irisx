@@ -52,7 +52,7 @@ func NewSessions(options SessionOptions) *Sessions {
 		Marshaller: new(SessionValueMarshallerJson),
 	}
 	s.Storage = &SessionStorageRedis{
-		db: rediswrap.New(rediswrap.Options{Url: s.Options.DatabaseUrl}),
+		db: rediswrap.NewFromUrl(s.Options.DatabaseUrl),
 	}
 	s.defaultOptions()
 	// s.lru = lru.New(lru.Options{Ttl: s.Options.SessionTTL, MaxAge: s.Options.SessionTTL * 2, MaxLength: 100000})
