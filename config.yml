@@ -1,0 +1,9 @@
+
+
+
+log:
+  wrap:
+    file: logs/wrap_log.%Y%m%d.log
+    level: trace
+    maxage: 1
+    console: true
