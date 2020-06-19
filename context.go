@@ -6,14 +6,15 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/RocksonZeta/wrap/errs"
+	"github.com/RocksonZeta/wrap/utils/mathutil"
+	"github.com/RocksonZeta/wrap/utils/nutil"
 	"github.com/RocksonZeta/wrap/wraplog"
 	"github.com/asaskevich/govalidator"
+	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/context"
 	"github.com/kataras/iris/v12/core/host"
 )
@@ -25,12 +26,29 @@ const (
 	RequestKeyParamErrors = "ParamErrors"
 	RequestKeyScripts     = "Scripts"
 	RequestKeyBreadCrumbs = "BreadCrumbs"
+	RequestKeyUID         = "UID"
 )
+
+// sid(session id)：标识会话，登录后可以标识用户
+// token：标识用户，也标识会话
+
+var CookieSid = "sid"
+var CookieToken = "x_token_user"
+var HeaderToken = "X-TOKEN-USER"
+var SessionTTL = 3600
+var CookieDomain = ""
+
+var HeaderToken2Uid func(token string) interface{}
+var CookieToken2Uid func(token string) interface{}
+var CookieSid2Uid func(sid string) interface{}
+var GenCookieSid func() string = func() string {
+	return mathutil.RandomStr(32, false)
+}
 
 // type H map[string]interface{}
 type Context struct {
 	context.Context
-	sessions *Sessions
+	// sessions *Sessions
 	// session         *sessions.Session
 	PageSize int
 	// AutoIncludeCss bool
@@ -44,7 +62,7 @@ type Context struct {
 	// sid         string //sessionId
 	// values sync.Map
 	// uid         int
-	session    *Session
+	// session    *Session
 	BeforeView func(ctx *Context, tplFile string)
 	// uid        interface{}
 	// sid        string
@@ -75,12 +93,12 @@ func (ctx *Context) RemoveCookieLocal(key string) {
 // 	return ctx.Uid() > 0
 // }
 
-func (ctx *Context) Sessions() *Sessions {
-	return ctx.sessions
-}
-func (ctx *Context) Session() *Session {
-	return ctx.session
-}
+// func (ctx *Context) Sessions() *Sessions {
+// 	return ctx.sessions
+// }
+// func (ctx *Context) Session() *Session {
+// 	return ctx.session
+// }
 func (ctx *Context) ParamErrors() map[string]string {
 	r := ctx.Values().Get(RequestKeyParamErrors)
 	if r == nil {
@@ -352,167 +370,8 @@ func (ctx *Context) QueryString() string {
 	return ctx.Request().URL.RawQuery
 }
 
-// func (ctx *Context) Signout() {
-// 	ctx.RemoveCookieLocal(SessionCookieId)
-// 	ctx.RemoveCookieLocal(SessionCookieTokenId)
-// 	if ctx.Session != nil {
-// 		localSessionUids.Delete(ctx.Session.Sid)
-// 	}
-// }
-
-// func (ctx *Context) CookieSet(name, value string, maxAge time.Duration) {
-// 	ctx.SetCookieKV(name, value, context.CookiePath("/"), context.CookieHTTPOnly(false), context.CookieExpires(maxAge))
-// }
-
-// func (ctx *Context) IsJson() bool {
-// 	return ctx.URLParamExists("json") || ctx.GetHeader("return") == "json" || strings.HasPrefix(ctx.Path(), "/json")
-// }
-
-// func saveUploadedFile(src io.Reader, fname string) (int64, error) {
-// 	// src, err := fh.Open()
-// 	// if err != nil {
-// 	// 	return 0, err
-// 	// }
-// 	// defer src.Close()
-
-// 	dst, err := os.OpenFile(fname, os.O_WRONLY|os.O_CREATE, os.FileMode(0666))
-
-// 	if err != nil {
-// 		return 0, err
-// 	}
-// 	defer dst.Close()
-
-// 	return io.Copy(dst, src)
-// }
-
-// type FileHeader struct {
-// 	*multipart.FileHeader
-// 	SavedFile string
-// }
-
-// func (ctx *Context) saveFileTmp(field string) (*FileHeader, error) {
-// 	file, info, err := ctx.FormFile(field)
-// 	if file == nil || info.Size <= 0 {
-// 		return nil, nil
-// 	}
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	defer file.Close()
-// 	fh := &FileHeader{FileHeader: info}
-// 	fh.SavedFile = filepath.Join(config.Config.Http.UploadTmpDir, formatUploadFileName(info.Filename))
-// 	saveUploadedFile(file, fh.SavedFile)
-// 	return fh, nil
-// }
-
-func formatUploadFileName(filename string) string {
-	return strconv.FormatInt(time.Now().Unix(), 10) + "-" + filename
-}
-
-// func (ctx *Context) saveFilesTmp() ([]FileHeader, int, error) {
-// 	//app.Run(iris.Addr(":8080") /* 0.*/, iris.WithPostMaxMemory(maxSize))
-// 	maxSize := ctx.Application().ConfigurationReadOnly().GetPostMaxMemory()
-
-// 	err := ctx.Request().ParseMultipartForm(maxSize)
-// 	if err != nil {
-// 		log.Log.Error(ctx.Path() + " Context.SaveFiles - parse multipart form error")
-// 		return nil, 1, err
-// 	}
-
-// 	form := ctx.Request().MultipartForm
-
-// 	var fhs []FileHeader
-// 	files := form.File["files[]"]
-// 	failures := 0
-// 	for _, file := range files {
-// 		src, err := file.Open()
-// 		if err != nil {
-// 			failures++
-// 			log.Log.Error(ctx.Path() + " Context.SaveFiles - open file error ")
-// 			continue
-// 		}
-// 		defer src.Close()
-// 		// fname := formatUploadFileName(file.Filename)
-// 		fname := filepath.Join(config.Config.Http.UploadTmpDir, formatUploadFileName(file.Filename))
-// 		_, err = saveUploadedFile(src, fname)
-// 		if err != nil {
-// 			failures++
-// 			log.Log.Error(ctx.Path() + " Context.SaveFiles - save file error " + file.Filename)
-// 			continue
-// 		}
-// 		fh := FileHeader{FileHeader: file, SavedFile: fname}
-// 		fhs = append(fhs, fh)
-// 	}
-// 	return fhs, failures, nil
-// }
-
-// func (ctx *Context) SaveFile(field, collection string) (httpfsclient.HfLink, *FileHeader, error) {
-// 	fh, err := ctx.saveFileTmp(field)
-// 	if fh == nil {
-// 		return "", nil, nil
-// 	}
-// 	if err != nil {
-// 		return "", nil, err
-// 	}
-// 	defer os.Remove(fh.SavedFile)
-// 	reader, err := fh.Open()
-// 	if err != nil {
-// 		return "", nil, err
-// 	}
-// 	defer reader.Close()
-// 	link, err := httpfsclient.Write(reader, config.Config.Clusters.Static, fh.Filename, collection)
-// 	return link, fh, err
-// }
-
-//SaveImage return [原图，裁剪图，压缩后的图]
-// func (ctx *Context) SaveImage(field string, crop []int, sizes [][]int) ([]httpfsclient.HfLink, *FileHeader, error) {
-// 	return ctx.SaveImageCollection(field, crop, sizes, httpfsclient.CollectionImage)
-// }
-// func (ctx *Context) SaveImageCollection(field string, crop []int, sizes [][]int, collection string) ([]httpfsclient.HfLink, *FileHeader, error) {
-// 	fh, err := ctx.saveFileTmp(field)
-// 	if nil == fh {
-// 		return nil, nil, nil
-// 	}
-// 	if err != nil {
-// 		return nil, nil, err
-// 	}
-// 	defer os.Remove(fh.SavedFile)
-
-// 	reader, err := fh.Open()
-// 	if err != nil {
-// 		return nil, nil, err
-// 	}
-// 	defer reader.Close()
-// 	hflink, err := httpfsclient.Write(reader, config.Config.Clusters.Static, fh.Filename, collection)
-// 	if err != nil {
-// 		return nil, nil, err
-// 	}
-// 	r := []httpfsclient.HfLink{hflink}
-// 	if len(crop) > 0 || len(sizes) > 0 {
-// 		images, err := hflink.ImageResize(crop, sizes)
-// 		if err != nil {
-// 			return nil, nil, err
-// 		}
-// 		return append(r, images...), fh, nil
-// 	}
-// 	return r, fh, nil
-// }
-// func (ctx *Context) SaveVideo(field string) (httpfsclient.HfLink, *FileHeader, error) {
-// 	fh, err := ctx.saveFileTmp(field)
-// 	if fh == nil {
-// 		return "", nil, nil
-// 	}
-// 	if err != nil {
-// 		return "", nil, err
-// 	}
-// 	defer os.Remove(fh.SavedFile)
-// 	reader, err := fh.Open()
-// 	if err != nil {
-// 		return "", nil, err
-// 	}
-// 	defer reader.Close()
-// 	link, err := httpfsclient.Write(reader, config.Config.Clusters.Static, fh.Filename, httpfsclient.CollectionVideo)
-// 	return link, fh, err
+// func formatUploadFileName(filename string) string {
+// 	return strconv.FormatInt(time.Now().Unix(), 10) + "-" + filename
 // }
 
 func (ctx *Context) ProxyPass(proxy, path string) error {
@@ -527,149 +386,6 @@ func (ctx *Context) ProxyPass(proxy, path string) error {
 	p.ServeHTTP(ctx.ResponseWriter(), req)
 	return nil
 }
-
-// func (ctx *Context) RedirectToReferer() {
-// 	ctx.Redirect(ctx.GetHeader("Referer"))
-// }
-
-// func (ctx *Context) FormBool(name string, dv bool) bool {
-// 	form := ctx.FormValues()
-// 	if vs, ok := form[name]; ok {
-// 		if len(vs) > 0 {
-// 			r, err := strconv.ParseBool(vs[0])
-// 			if err != nil {
-// 				log.Log.Error(err)
-// 			}
-// 			return r
-// 		} else {
-// 			return dv
-// 		}
-// 	}
-// 	return dv
-// }
-// func (ctx *Context) FormInt(name string, dv int) int {
-// 	form := ctx.FormValues()
-// 	if vs, ok := form[name]; ok {
-// 		if len(vs) > 0 {
-// 			r, err := strconv.Atoi(vs[0])
-// 			if err != nil {
-// 				log.Log.Error(err)
-// 			}
-// 			return r
-// 		} else {
-// 			return dv
-// 		}
-// 	}
-// 	return dv
-// }
-// func (ctx *Context) FormInt64(name string, dv int64) int64 {
-// 	form := ctx.FormValues()
-// 	if vs, ok := form[name]; ok {
-// 		if len(vs) > 0 {
-// 			r, err := strconv.ParseInt(vs[0], 10, 64)
-// 			if err != nil {
-// 				log.Log.Error(err)
-// 			}
-// 			return r
-// 		} else {
-// 			return dv
-// 		}
-// 	}
-// 	return dv
-// }
-// func (ctx *Context) FormNullInt(name string) null.Int {
-// 	form := ctx.FormValues()
-// 	if vs, ok := form[name]; ok {
-// 		if len(vs) > 0 {
-// 			r, _ := strconv.ParseInt(vs[0], 10, 64)
-// 			return null.IntFrom(r)
-// 		}
-// 	}
-// 	return null.Int{}
-// }
-
-// func (ctx *Context) FormFloat32(name string, dv float32) float32 {
-// 	form := ctx.FormValues()
-// 	if vs, ok := form[name]; ok {
-// 		if len(vs) > 0 {
-// 			r, err := strconv.ParseFloat(vs[0], 32)
-// 			if err != nil {
-// 				log.Log.Error(err)
-// 			}
-// 			return float32(r)
-// 		} else {
-// 			return dv
-// 		}
-// 	}
-// 	return dv
-// }
-// func (ctx *Context) FormFloat64(name string, dv float64) float64 {
-// 	form := ctx.FormValues()
-// 	if vs, ok := form[name]; ok {
-// 		if len(vs) > 0 {
-// 			r, err := strconv.ParseFloat(vs[0], 64)
-// 			if err != nil {
-// 				log.Log.Error(err)
-// 			}
-// 			return r
-// 		} else {
-// 			return dv
-// 		}
-// 	}
-// 	return dv
-// }
-
-// func (ctx *Context) SaveFile(field, collection string) (fsutil.File, *multipart.FileHeader, error) {
-// 	f, h, err := ctx.FormFile(field)
-// 	defer f.Close()
-// 	if err != nil {
-// 		return fsutil.File{}, h, err
-// 	}
-// 	if h.Size <= 0 {
-// 		return fsutil.File{}, h, err
-// 	}
-// 	nf := fsutil.NewFileRandom(config.Config.Dfs.Static, collection, filepath.Ext(h.Filename))
-// 	err = nf.Write(f)
-// 	return nf, h, err
-// }
-
-// type SaveImageResult struct {
-// 	Raw     fsutil.File
-// 	Crop    fsutil.File
-// 	Resizes []fsutil.File
-// 	Header  *multipart.FileHeader
-// 	Error   error
-// }
-
-//SaveImage 保存图片 crop :[x,y,w,h] , sizes:[[100,100],[200,300]]
-// func (ctx *Context) SaveImage(field, collection string, crop []int, sizes [][]int) SaveImageResult {
-// 	var r SaveImageResult
-// 	r.Raw, r.Header, r.Error = ctx.SaveFile(field, collection)
-// 	if r.Error != nil || r.Header.Size <= 0 {
-// 		return r
-// 	}
-// 	if len(crop) >= 4 {
-// 		r.Crop, r.Error = r.Raw.ImgCrop(crop[0], crop[1], crop[2], crop[3])
-// 		if r.Error != nil {
-// 			return r
-// 		}
-// 	}
-// 	if len(sizes) > 0 {
-// 		if r.Crop.RPath != "" {
-// 			r.Resizes, r.Error = r.Crop.ImgResizeKeepRatio(sizes)
-// 		} else {
-// 			r.Resizes, r.Error = r.Raw.ImgResizeKeepRatio(sizes)
-// 		}
-// 	}
-// 	return r
-// }
-
-// func (ctx *Context) Check() {
-// 	if len(ctx.ParamErrors()) > 0 {
-
-// 		// panic(errors.PageError{Err: errors.Err{State: errorcode.HttpParamError}, FieldError: ctx.ParamErrors})
-// 	}
-// }
 
 func (ctx *Context) CheckQuery(field string) *Validator {
 	return NewValidator(ctx, field, ctx.URLParam(field), ctx.URLParamExists(field))
@@ -697,4 +413,80 @@ func (ctx *Context) PushBreadCrumb(title, url string) {
 func (ctx *Context) AddScript(js string) string {
 	ctx.Values().Set(RequestKeyScripts, append(ctx.Scripts(), js))
 	return ""
+}
+func (ctx *Context) Uid() interface{} {
+	uid := ctx.Values().Get(RequestKeyUID)
+	if nil != uid {
+		return uid
+	}
+	var token string
+	if token = ctx.HeaderToken(); token != "" && nil != HeaderToken2Uid {
+		uid = HeaderToken2Uid(token)
+	} else if token = ctx.CookieToken(); token != "" && nil != CookieToken2Uid {
+		uid = CookieToken2Uid(token)
+	} else if token = ctx.CookieSid(); token != "" && nil != CookieSid2Uid {
+		uid = CookieSid2Uid(token)
+	}
+	if uid != nil {
+		ctx.SetUid(uid)
+	}
+	return uid
+}
+func (ctx *Context) UidInt() int {
+	return nutil.ValueOf(ctx.Uid()).AsInt()
+}
+func (ctx *Context) UidInt64() int64 {
+	return nutil.ValueOf(ctx.Uid()).AsInt64()
+}
+func (ctx *Context) UidString() string {
+	return nutil.ValueOf(ctx.Uid()).String()
+}
+func (ctx *Context) HasSignin() bool {
+	return nutil.ValueOf(ctx.Uid()).Bool()
+}
+func (ctx *Context) SetUid(uid interface{}) {
+	ctx.Values().Set(RequestKeyUID, uid)
+}
+
+func (ctx *Context) Sid() string {
+	var sid string
+	if sid = ctx.HeaderToken(); sid != "" {
+		return sid
+	}
+	if sid = ctx.CookieToken(); sid != "" {
+		return sid
+	}
+	if sid = ctx.CookieSid(); sid != "" {
+		return sid
+	}
+	return sid
+}
+func (ctx *Context) CookieSid() string {
+	return ctx.GetCookie(CookieSid)
+}
+func (ctx *Context) SetCookieSid(sid string) {
+	ctx.SetCookieLocal(CookieSid, sid, SessionTTL, true, CookieDomain)
+}
+func (ctx *Context) CookieToken() string {
+	return ctx.GetCookie(CookieToken)
+}
+func (ctx *Context) SetCookieToken(token string, ttl int) {
+	ctx.SetCookieLocal(CookieToken, token, ttl, true, CookieDomain)
+}
+func (ctx *Context) HeaderToken() string {
+	return ctx.GetHeader(HeaderToken)
+}
+func (ctx *Context) SetTTLCookieSid() {
+	sid := ctx.GetCookie(CookieSid)
+	ctx.SetCookieLocal(CookieSid, sid, SessionTTL, true, CookieDomain)
+}
+
+func SidFilter(ctx iris.Context) {
+	c := ctx.(*Context)
+	sid := c.Sid()
+	if sid != "" {
+		ctx.Next()
+		return
+	}
+	c.SetCookieSid(GenCookieSid())
 }

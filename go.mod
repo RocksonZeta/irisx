@@ -3,7 +3,7 @@ module github.com/RocksonZeta/irisx
 go 1.14
 
 require (
-	github.com/RocksonZeta/wrap v1.0.7
+	github.com/RocksonZeta/wrap v1.0.8
 	github.com/asaskevich/govalidator v0.0.0-20200428143746-21a406dcc535
 	github.com/fatih/structs v1.1.0
 	github.com/go-redis/redis/v7 v7.2.0

@@ -11,51 +11,36 @@ import (
 	"github.com/kataras/iris/v12/context"
 )
 func main() {
-	sessionsOptions := irisx.SessionOptions{
-		DatabaseUrl: "redis://localhost:50002/0",
-		Password:    "hello",
-	}
-	sessions := irisx.NewSessions(sessionsOptions)
-	sessions.GetUid = func(sid string, sidForm int) (interface{}, error) {
-		if sid == "vgs6pNYZ7nDKV0U9PANzARzNUkvFg6Cu" { //"JdC5guusjGnJKaOsdk5Tw1+wUghqVg74Vb5ir1nVFp+AZPsV6YW3Eq8dPmFD9xrD"
-			return 1, nil
-		}
-		return 0, nil
-	}
 	app := iris.New()
+	sidUidMap := make(map[string]int)
+	sidUidMap["abc"] = 100
+	irisx.CookieSid2Uid = func(sid string) interface{} {
+		return sidUidMap[sid]
+	}
 	app.ContextPool.Attach(func() context.Context {
 		return &irisx.Context{
 			Context:  context.NewContext(app),
 			PageSize: 20,
 		}
 	})
-	app.Use(sessions.Filter)
+	app.Use(irisx.SidFilter)
 	app.Get("/", func(ctx iris.Context) {
 		c := ctx.(*irisx.Context)
-		c.Ok(c.Session().GetUidInt())
+		c.Ok(c.Uid())
 	})
 	app.Get("/setuid", func(ctx iris.Context) {
 		c := ctx.(*irisx.Context)
-		c.Session().SetUid(1)
-		c.Ok("")
+		sidUidMap[c.Sid()] = 123
+		c.Ok(c.Uid())
 	})
-	app.Get("/setuid2", func(ctx iris.Context) {
+	app.Get("/settoken", func(ctx iris.Context) {
 		c := ctx.(*irisx.Context)
-		c.Session().SetUid(2)
-		c.Ok("")
-	})
-	app.Get("/token", func(ctx iris.Context) {
-		c := ctx.(*irisx.Context)
-		sid, token := c.Sessions().NewToken()
-		fmt.Println("sid:" + sid)
-		c.Ok(token)
-
+		c.SetCookieToken("abc", 3600*24*10)
+		c.Ok(c.Sid())
 	})
 	app.Get("/uid", func(ctx iris.Context) {
 		c := ctx.(*irisx.Context)
-		uid := c.Session().GetUidInt()
-		c.Ok(uid)
-
+		c.Ok(c.Uid())
 	})
 
 	app.Listen(":9000")

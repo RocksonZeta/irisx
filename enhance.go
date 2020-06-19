@@ -348,8 +348,8 @@ func Enhance(app *view.HTMLEngine) {
 		return template.HTML(r)
 	})
 
-	app.AddFunc("fsize", func(size interface{}) string {
-		return ""
+	app.AddFunc("value", func(v interface{}) nutil.Value {
+		return nutil.ValueOf(v)
 	})
 }
 
