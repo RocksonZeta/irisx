@@ -4,14 +4,10 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strings"
-	"sync"
 
 	"github.com/RocksonZeta/wrap/errs"
-	"github.com/RocksonZeta/wrap/utils/mathutil"
-	"github.com/RocksonZeta/wrap/utils/nutil"
 	"github.com/RocksonZeta/wrap/wraplog"
 	"github.com/asaskevich/govalidator"
 	"github.com/kataras/iris/v12"
@@ -19,30 +15,39 @@ import (
 	"github.com/kataras/iris/v12/core/host"
 )
 
-var pkg = reflect.TypeOf(BreadCrumb{}).PkgPath()
-var log = wraplog.Logger.Fork(pkg, "Context")
+var log = wraplog.Logger.Fork("github.com/RocksonZeta/irisx", "Context")
 
 const (
 	RequestKeyParamErrors = "ParamErrors"
 	RequestKeyScripts     = "Scripts"
-	RequestKeyBreadCrumbs = "BreadCrumbs"
-	RequestKeyUID         = "UID"
+	// RequestKeyBreadCrumbs = "BreadCrumbs"
+	// RequestKeyUID         = "UID"
 )
 
 // sid(session id)：标识会话，登录后可以标识用户
 // token：标识用户，也标识会话
 
-var CookieSid = "sid"
-var CookieToken = "x_token_user"
-var HeaderToken = "X-TOKEN-USER"
-var SessionTTL = 3600
-var CookieDomain = ""
+// var CookieSid = "sid"
+// var CookieToken = "x_token_user"
+// var HeaderToken = "X-TOKEN-USER"
+// var SessionTTL = 3600
+// var CookieDomain = ""
 
-var HeaderToken2Uid func(token string) interface{}
-var CookieToken2Uid func(token string) interface{}
-var CookieSid2Uid func(sid string) interface{}
-var GenCookieSid func() string = func() string {
-	return mathutil.RandomStr(32, false)
+// var HeaderToken2Uid func(token string) interface{}
+// var CookieToken2Uid func(token string) interface{}
+// var CookieSid2Uid func(sid string) interface{}
+// var GenCookieSid func() string = func() string {
+// 	return mathutil.RandomStr(32, false)
+// }
+
+type SessionProvider interface {
+	GetSessionId(ctx *Context) string
+	SetSessionId(ctx *Context)
+	Set(key string, value interface{}, secs int) error
+	Get(key string, result interface{}) error
+	Refresh(key string, secs int) error
+	Remove(key string) error
+	UidKey() string
 }
 
 // type H map[string]interface{}
@@ -66,14 +71,15 @@ type Context struct {
 	BeforeView func(ctx *Context, tplFile string)
 	// uid        interface{}
 	// sid        string
+	SessionProvider SessionProvider
 }
 
-var headers sync.Map
+// var headers sync.Map
 
-type BreadCrumb struct {
-	Title string
-	Url   string
-}
+// type BreadCrumb struct {
+// 	Title string
+// 	Url   string
+// }
 
 func (ctx *Context) Do(handlers context.Handlers) {
 	context.Do(ctx, handlers)
@@ -112,13 +118,6 @@ func (ctx *Context) Scripts() []string {
 		return nil
 	}
 	return r.([]string)
-}
-func (ctx *Context) BreadCrumbs() []BreadCrumb {
-	r := ctx.Values().Get(RequestKeyBreadCrumbs)
-	if r == nil {
-		return nil
-	}
-	return r.([]BreadCrumb)
 }
 
 // func (ctx *Context) GetUidInt() int {
@@ -349,8 +348,8 @@ func (ctx *Context) PathMatch(pattern string) bool {
 	return r
 }
 
-func (ctx *Context) RedirectSignin(needRedirectFrom bool) {
-	signinUrl := "/signin"
+func (ctx *Context) RedirectSignin(signinUrl string, needRedirectFrom bool) {
+	// signinUrl := "/signin"
 	p := ctx.RequestPath(true)
 	if needRedirectFrom && signinUrl != p {
 		ctx.RedirectWithFrom(signinUrl)
@@ -406,79 +405,76 @@ func (ctx *Context) CheckFile(field string) *ValidatorFile {
 	return NewValidatorFile(ctx, field, src, header, err != nil)
 }
 
-func (ctx *Context) PushBreadCrumb(title, url string) {
-	ctx.Values().Set(RequestKeyBreadCrumbs, append(ctx.BreadCrumbs(), BreadCrumb{Title: title, Url: url}))
-}
-
 func (ctx *Context) AddScript(js string) string {
 	ctx.Values().Set(RequestKeyScripts, append(ctx.Scripts(), js))
 	return ""
 }
-func (ctx *Context) Uid() interface{} {
-	uid := ctx.Values().Get(RequestKeyUID)
-	if nil != uid {
-		return uid
+
+func (ctx *Context) SetUid(uid interface{}, secs int) {
+	err := ctx.SessionProvider.Set(ctx.Sid()+"/"+ctx.SessionProvider.UidKey(), uid, secs)
+	if err != nil {
+		log.Error().Func("SetUid").Err(err).Msg(err.Error())
+		return
 	}
-	var token string
-	if token = ctx.HeaderToken(); token != "" && nil != HeaderToken2Uid {
-		uid = HeaderToken2Uid(token)
-	} else if token = ctx.CookieToken(); token != "" && nil != CookieToken2Uid {
-		uid = CookieToken2Uid(token)
-	} else if token = ctx.CookieSid(); token != "" && nil != CookieSid2Uid {
-		uid = CookieSid2Uid(token)
+	ctx.Values().Set(ctx.SessionProvider.UidKey(), uid)
+}
+func (ctx *Context) GetUid(uid interface{}) error {
+	err := ctx.SessionProvider.Get(ctx.Sid()+"/"+ctx.SessionProvider.UidKey(), uid)
+	if err != nil {
+		log.Error().Func("GetUid").Err(err).Msg(err.Error())
+		return err
 	}
-	if uid != nil {
-		ctx.SetUid(uid)
+	return nil
+}
+func (ctx *Context) GetUidInt() int {
+	var uid int
+	var err error
+	uid, err = ctx.Values().GetInt(ctx.SessionProvider.UidKey())
+	if err != nil || uid == 0 {
+		err = ctx.SessionProvider.Get(ctx.Sid()+"/"+ctx.SessionProvider.UidKey(), &uid)
+		if err != nil {
+			log.Error().Func("GetUid").Err(err).Msg(err.Error())
+			return 0
+		}
+		ctx.Values().Set(ctx.SessionProvider.UidKey(), uid)
 	}
 	return uid
 }
-func (ctx *Context) UidInt() int {
-	return nutil.ValueOf(ctx.Uid()).AsInt()
+func (ctx *Context) GetUidInt64() int64 {
+	var uid int64
+	var err error
+	uid, err = ctx.Values().GetInt64(ctx.SessionProvider.UidKey())
+	if err != nil || uid == 0 {
+		err = ctx.SessionProvider.Get(ctx.Sid()+"/"+ctx.SessionProvider.UidKey(), &uid)
+		if err != nil {
+			log.Error().Func("GetUidInt64").Err(err).Msg(err.Error())
+			return 0
+		}
+		ctx.Values().Set(ctx.SessionProvider.UidKey(), uid)
+	}
+	return uid
 }
-func (ctx *Context) UidInt64() int64 {
-	return nutil.ValueOf(ctx.Uid()).AsInt64()
+func (ctx *Context) GetUidString() string {
+	var uid string
+	var err error
+	uid = ctx.Values().GetString(ctx.SessionProvider.UidKey())
+	if uid == "" {
+		err = ctx.SessionProvider.Get(ctx.Sid()+"/"+ctx.SessionProvider.UidKey(), &uid)
+		if err != nil {
+			log.Error().Func("GetUidString").Err(err).Msg(err.Error())
+			return ""
+		}
+		ctx.Values().Set(ctx.SessionProvider.UidKey(), uid)
+	}
+	return uid
 }
-func (ctx *Context) UidString() string {
-	return nutil.ValueOf(ctx.Uid()).String()
+func (ctx *Context) Sid() string {
+	return ctx.SessionProvider.GetSessionId(ctx)
 }
 func (ctx *Context) HasSignin() bool {
-	return nutil.ValueOf(ctx.Uid()).Bool()
-}
-func (ctx *Context) SetUid(uid interface{}) {
-	ctx.Values().Set(RequestKeyUID, uid)
-}
-
-func (ctx *Context) Sid() string {
-	var sid string
-	if sid = ctx.HeaderToken(); sid != "" {
-		return sid
-	}
-	if sid = ctx.CookieToken(); sid != "" {
-		return sid
-	}
-	if sid = ctx.CookieSid(); sid != "" {
-		return sid
-	}
-	return sid
-}
-func (ctx *Context) CookieSid() string {
-	return ctx.GetCookie(CookieSid)
-}
-func (ctx *Context) SetCookieSid(sid string) {
-	ctx.SetCookieLocal(CookieSid, sid, SessionTTL, true, CookieDomain)
-}
-func (ctx *Context) CookieToken() string {
-	return ctx.GetCookie(CookieToken)
-}
-func (ctx *Context) SetCookieToken(token string, ttl int) {
-	ctx.SetCookieLocal(CookieToken, token, ttl, true, CookieDomain)
-}
-func (ctx *Context) HeaderToken() string {
-	return ctx.GetHeader(HeaderToken)
-}
-func (ctx *Context) SetTTLCookieSid() {
-	sid := ctx.GetCookie(CookieSid)
-	ctx.SetCookieLocal(CookieSid, sid, SessionTTL, true, CookieDomain)
+	var uid interface{}
+	ctx.GetUid(&uid)
+	return uid != nil
 }
 
 func SidFilter(ctx iris.Context) {
@@ -488,5 +484,6 @@ func SidFilter(ctx iris.Context) {
 		ctx.Next()
 		return
 	}
-	c.SetCookieSid(GenCookieSid())
+	c.SessionProvider.SetSessionId(c)
+	// c.SetCookieSid(GenCookieSid())
 }

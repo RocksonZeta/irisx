@@ -8,6 +8,8 @@ github.com/CloudyKit/jet/v3 v3.0.0/go.mod h1:HKQPgSJmdK8hdoAbKUUWajkHyHo4RaU5rMd
 github.com/Joker/hpp v1.0.0/go.mod h1:8x5n+M1Hp5hC0g8okX3sR3vFQwynaX/UgSOM9MeBKzY=
 github.com/RocksonZeta/logger v1.0.6 h1:ObmCDL8F4BP92vX3BUfOhcx3HaZUyy/sA1ZWiwFbnwE=
 github.com/RocksonZeta/logger v1.0.6/go.mod h1:KGkW1Xv6Te0hvxV3JI5Q+mbeEohN/wTPaNDUvrevcLY=
+github.com/RocksonZeta/logger v1.0.7 h1:KfHgno8b21EuyRn3YpiAbkjw1g3Sg6H17dfplZkX62c=
+github.com/RocksonZeta/logger v1.0.7/go.mod h1:KGkW1Xv6Te0hvxV3JI5Q+mbeEohN/wTPaNDUvrevcLY=
 github.com/RocksonZeta/wrap v1.0.2 h1:AAxJg8717yAZHSznnDwHh0GsGAFeddEamwg8mLgDCMg=
 github.com/RocksonZeta/wrap v1.0.2/go.mod h1:Y3lWB/+2OAwBLnvTyhyCseqKbdzpJHNxf8yVvVrPUlc=
 github.com/RocksonZeta/wrap v1.0.3 h1:hGl0DqWMFZ4xeia7AboSiVZdcgdRzwip0li6LzsRVLA=
