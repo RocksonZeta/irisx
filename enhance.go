@@ -169,11 +169,8 @@ func Enhance(app *view.HTMLEngine) {
 		}
 		return template.HTML("")
 	})
-	app.AddFunc("page", func(ctx *Context, total int64) template.HTML {
-		return template.HTML(Page(ctx, total, true, "pagination pagination-warning"))
-	})
-	app.AddFunc("pagex", func(ctx *Context, total int64, showTotal bool, classes string) template.HTML {
-		return template.HTML(Page(ctx, total, showTotal, classes))
+	app.AddFunc("page", func(ctx *Context, pageSize int, total int64, showTotal bool, cssClass string) template.HTML {
+		return template.HTML(Page(ctx, pageSize, total, showTotal, cssClass))
 	})
 	app.AddFunc("select", func(options map[int]string, defaultV interface{}, needEmptyOption bool, props string) template.HTML {
 		return selector(options, defaultV, needEmptyOption, props)

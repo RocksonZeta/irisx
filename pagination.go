@@ -8,12 +8,11 @@ import (
 	"strconv"
 )
 
-func Page(ctx *Context, total int64, showTotal bool, classes string) string {
+func Page(ctx *Context, ps int, total int64, showTotal bool, classes string) string {
 	if nil == ctx {
 		return ""
 	}
 	piName := "pi"
-	ps := ctx.PageSize
 	url := ctx.Request().RequestURI
 	current := ctx.URLParamIntDefault(piName, 0)
 	if ps <= 0 {
