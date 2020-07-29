@@ -52,7 +52,6 @@ func TestContext(t *testing.T) {
 		return &irisx.Context{
 			SessionProvider: &Sessions{},
 			Context:         context.NewContext(app),
-			PageSize:        20,
 		}
 	})
 
@@ -68,11 +67,8 @@ func TestContext(t *testing.T) {
 	})
 	app.Get("/setuid2", func(ctx iris.Context) {
 		c := ctx.(*irisx.Context)
+		c.SetUid(2, 3)
 		c.Ok(c.GetUidInt())
-	})
-	app.Get("/settoken", func(ctx iris.Context) {
-		c := ctx.(*irisx.Context)
-		c.Ok(c.Sid())
 	})
 	app.Get("/token", func(ctx iris.Context) {
 		c := ctx.(*irisx.Context)

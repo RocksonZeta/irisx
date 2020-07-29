@@ -20,25 +20,7 @@ var log = wraplog.Logger.Fork("github.com/RocksonZeta/irisx", "Context")
 const (
 	RequestKeyParamErrors = "ParamErrors"
 	RequestKeyScripts     = "Scripts"
-	// RequestKeyBreadCrumbs = "BreadCrumbs"
-	// RequestKeyUID         = "UID"
 )
-
-// sid(session id)：标识会话，登录后可以标识用户
-// token：标识用户，也标识会话
-
-// var CookieSid = "sid"
-// var CookieToken = "x_token_user"
-// var HeaderToken = "X-TOKEN-USER"
-// var SessionTTL = 3600
-// var CookieDomain = ""
-
-// var HeaderToken2Uid func(token string) interface{}
-// var CookieToken2Uid func(token string) interface{}
-// var CookieSid2Uid func(sid string) interface{}
-// var GenCookieSid func() string = func() string {
-// 	return mathutil.RandomStr(32, false)
-// }
 
 type SessionProvider interface {
 	GetSessionId(ctx *Context) string
@@ -53,33 +35,9 @@ type SessionProvider interface {
 // type H map[string]interface{}
 type Context struct {
 	context.Context
-	// sessions *Sessions
-	// session         *sessions.Session
-	PageSize int
-	// AutoIncludeCss bool
-	// AutoIncludeJs  bool
-	// AutoHead       bool
-	// Owner          table.User
-	// Error           *errors.PageError
-	// ParamErrors map[string]string
-	// BreadCrumbs []BreadCrumb
-	// Scripts     []string
-	// sid         string //sessionId
-	// values sync.Map
-	// uid         int
-	// session    *Session
-	BeforeView func(ctx *Context, tplFile string)
-	// uid        interface{}
-	// sid        string
+	BeforeView      func(ctx *Context, tplFile string)
 	SessionProvider SessionProvider
 }
-
-// var headers sync.Map
-
-// type BreadCrumb struct {
-// 	Title string
-// 	Url   string
-// }
 
 func (ctx *Context) Do(handlers context.Handlers) {
 	context.Do(ctx, handlers)
@@ -95,16 +53,6 @@ func (ctx *Context) RemoveCookieLocal(key string) {
 	ctx.Context.SetCookie(&http.Cookie{Name: key, Value: "", MaxAge: -1, Path: "/"})
 }
 
-// func (ctx *Context) HasSignin() bool {
-// 	return ctx.Uid() > 0
-// }
-
-// func (ctx *Context) Sessions() *Sessions {
-// 	return ctx.sessions
-// }
-// func (ctx *Context) Session() *Session {
-// 	return ctx.session
-// }
 func (ctx *Context) ParamErrors() map[string]string {
 	r := ctx.Values().Get(RequestKeyParamErrors)
 	if r == nil {
@@ -119,13 +67,6 @@ func (ctx *Context) Scripts() []string {
 	}
 	return r.([]string)
 }
-
-// func (ctx *Context) GetUidInt() int {
-// 	return ctx.Uid.(int)
-// }
-// func (ctx *Context) GetUidString() string {
-// 	return ctx.Uid.(string)
-// }
 func (ctx *Context) AddParamError(key, msg string) {
 	if nil == ctx.ParamErrors() {
 		ctx.Values().Set(RequestKeyParamErrors, make(map[string]string))
@@ -199,32 +140,6 @@ func (ctx *Context) Ok(data interface{}) {
 // 	Id   int    `json:"id"`
 // 	Text string `json:"text"`
 // }
-
-type PageData struct {
-	Items     interface{}
-	Total     int64 //共多少条
-	PageIndex int   //当前页
-	PageCount int   //共多少页
-	PageSize  int   //一页显示多少条
-}
-
-func (ctx *Context) OkPageDefault(data interface{}, total int64) {
-	pi := ctx.CheckQuery("PageIndex").Empty().Int(0)
-	ctx.OkPage(data, total, pi, 0)
-}
-func (ctx *Context) OkPage(data interface{}, total int64, pageIndex, pageSize int) {
-	if pageSize == 0 {
-		pageSize = ctx.PageSize
-	}
-	var pc int
-	if pageSize != 0 {
-		pc = int(total) / pageSize
-		if pc*pageSize != int(total) {
-			pc++
-		}
-	}
-	ctx.Ok(PageData{Items: data, Total: total, PageIndex: pageIndex, PageSize: pageSize, PageCount: pc})
-}
 
 // func (ctx *Context) Fail() {
 // 	ctx.JSON(ctx.Error)
