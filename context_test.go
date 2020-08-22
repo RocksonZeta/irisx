@@ -17,10 +17,16 @@ type Sessions struct {
 }
 
 func (s *Sessions) GetSessionId(ctx *irisx.Context) string {
+	sid := ctx.Values().GetString("__sessionid__")
+	if sid != "" {
+		return sid
+	}
 	return ctx.GetCookie("token1")
 }
 func (s *Sessions) SetSessionId(ctx *irisx.Context) {
-	ctx.SetCookieLocal("token1", strconv.Itoa(rand.Intn(100000)), 3600, true, "")
+	sid := strconv.Itoa(rand.Intn(100000))
+	ctx.Values().Set("__sessionid__", sid)
+	ctx.SetCookieLocal("token1", sid, 3600, true, "")
 }
 func (s *Sessions) Set(key string, value interface{}, secs int) error {
 	sessionValues[key] = value
