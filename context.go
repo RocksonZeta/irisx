@@ -317,7 +317,7 @@ func (ctx *Context) CheckPath(field string) *Validator {
 }
 func (ctx *Context) CheckFile(field string) *ValidatorFile {
 	src, header, err := ctx.FormFile(field)
-	return NewValidatorFile(ctx, field, src, header, err != nil)
+	return NewValidatorFile(ctx, field, src, header, err)
 }
 
 func (ctx *Context) AddScript(js string) string {

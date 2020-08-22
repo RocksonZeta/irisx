@@ -48,15 +48,16 @@ func NewValidatorValues(ctx *Context, key string, values []string, exists bool) 
 		// errors: make(map[string]string),
 	}
 }
-func NewValidatorFile(ctx *Context, key string, file multipart.File, header *multipart.FileHeader, exists bool) *ValidatorFile {
+func NewValidatorFile(ctx *Context, key string, file multipart.File, header *multipart.FileHeader, err error) *ValidatorFile {
 	return &ValidatorFile{
 		ctx: ctx,
 		// params: params,
 		key:    key,
 		file:   file,
 		header: header,
-		exists: exists,
+		exists: err != nil,
 		goon:   true,
+		err:    err,
 		// errors: make(map[string]string),
 	}
 }
@@ -579,6 +580,7 @@ type ValidatorFile struct {
 	header *multipart.FileHeader
 	exists bool
 	goon   bool
+	err    error
 	// isEmpty bool
 	// errors map[string]string
 }
@@ -677,6 +679,21 @@ func (v *ValidatorFile) Copy(dstFile string) {
 		v.addError(v.key + ":" + err.Error())
 		return
 	}
+}
+
+type UploadFile struct {
+	Header *multipart.FileHeader
+	File   multipart.File
+	Error  error
+}
+
+func (v *ValidatorFile) File(dstFile string) UploadFile {
+	var r UploadFile
+	r.Header = v.header
+	r.File = v.file
+	r.Error = v.err
+	return r
+
 }
 
 // type SaveFileResult struct {
