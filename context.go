@@ -400,5 +400,6 @@ func SidFilter(ctx iris.Context) {
 		return
 	}
 	c.SessionProvider.SetSessionId(c)
+	ctx.Next()
 	// c.SetCookieSid(GenCookieSid())
 }
