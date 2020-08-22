@@ -685,6 +685,8 @@ type UploadFile struct {
 	Header *multipart.FileHeader
 	File   multipart.File
 	Error  error
+	Ext    string
+	Size   int64
 }
 
 func (v *ValidatorFile) File(dstFile string) UploadFile {
@@ -692,6 +694,10 @@ func (v *ValidatorFile) File(dstFile string) UploadFile {
 	r.Header = v.header
 	r.File = v.file
 	r.Error = v.err
+	if r.Header != nil {
+		r.Ext = filepath.Ext(r.Header.Filename)
+		r.Size = r.Header.Size
+	}
 	return r
 
 }
